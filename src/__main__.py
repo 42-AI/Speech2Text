@@ -27,13 +27,20 @@ HIGH_FREQUENCY = 500
 # The width of the used frequency range
 FREQUENCY_RANGE = HIGH_FREQUENCY - LOW_FREQUENCY
 
+device = "cuda" if torch.cuda.is_available() else "cpu"
+print("Using {} device".format(device))
+
 class Net(nn.Module):
     def __init__(self):
         super(Net, self).__init__()
-        self.rnn = nn.RNN(FREQUENCY_RANGE, 10, 2, bidirectional=True)
+        self.rnn = nn.RNN(FREQUENCY_RANGE, 10, 2, batch_first=True, bidirectional=True)
+
+        self.loss_fn = nn.CrossEntropyLoss()
+        self.optimizer = torch.optim.SGD(self.parameters(), lr=1e-3)
 
     def forward(self, x):
-        self.rnn(x)
+        output, hn = self.rnn(x)
+        return output
 
 
 
@@ -41,7 +48,18 @@ def train(dataloader, model):
     model.train()
     for batch, (X, y) in enumerate(dataloader):
         words = word.split(y)
-        # TODO
+
+        X = X.to(device)
+        pred = model(X)
+        loss = loss_fn(pred, y)
+
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
+        if batch % 100 == 0:
+            loss, current = loss.item(), batch * len(X)
+            print(f"loss: {loss:>7f}  [{current:>5d}/{size:>5d}]")
 
 
 
@@ -83,7 +101,12 @@ if len(sys.argv) > 1 and sys.argv[1] == '--train':
 
     dataloader = dataset.SpeechDataset(TRAIN_DATA)
     print('Training...')
-    train(dataloader, model)
+    epochs = 5
+    for t in range(epochs):
+        print(f"Epoch {t+1}\n-------------------------------")
+        train(dataloader, model)
+        # TODO test(test_dataloader, model)
+    print("Done!")
 
     print('Saving weights...')
     torch.save(model.state_dict(), WEIGHTS_FILE)
@@ -100,11 +123,10 @@ else:
 
             # Showing the spectrogram of the input sound
             spec = get_spectrogram(waveform)
-            show_spectrogram(spec)
+            #show_spectrogram(spec)
 
             print('Running model...')
-            # TODO Support multiple channels?
-            result = model(spec[0])
+            result = model(numpy.moveaxis(numpy.array(spec), 1, -1))
             print('Result:', result)
         else:
             print('Input file not found!')
