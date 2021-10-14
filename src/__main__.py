@@ -35,13 +35,17 @@ class Net(nn.Module):
     def forward(self, x):
         self.rnn(x)
 
+
+
 def train(dataloader, model):
     model.train()
     for batch, (X, y) in enumerate(dataloader):
         words = word.split(y)
         # TODO
 
-def show_spectrogram(waveform):
+
+
+def get_spectrogram(waveform):
     spectrogram_transform = transforms.Spectrogram(
         n_fft=HIGH_FREQUENCY * 2,
         win_length=None,
@@ -51,15 +55,17 @@ def show_spectrogram(waveform):
         power=2.0,
     )
 
-    spectrogram = spectrogram_transform(waveform)
+    return spectrogram_transform(waveform)
 
+def show_spectrogram(spec):
+    # TODO Support multiple channels?
     figure, axis = plt.subplots(1, 1)
     axis.set_title('Spectrogram')
     axis.set_ylabel('Frequency')
     axis.set_xlabel('Frame')
-    im = axis.imshow(librosa.power_to_db(spectrogram), origin='lower', aspect='auto')
+    im = axis.imshow(librosa.power_to_db(spec[0]), origin='lower', aspect='auto')
     figure.colorbar(im, ax=axis)
-    plt.show(block=False)
+    plt.show()
 
 
 
@@ -91,10 +97,14 @@ else:
             print('Reading file...')
             print('File info:', torchaudio.info(INPUT_FILE))
             waveform, sample_rate = torchaudio.load(INPUT_FILE)
-            show_spectrogram(waveform)
+
+            # Showing the spectrogram of the input sound
+            spec = get_spectrogram(waveform)
+            show_spectrogram(spec)
 
             print('Running model...')
-            result = model(audio)
+            # TODO Support multiple channels?
+            result = model(spec[0])
             print('Result:', result)
         else:
             print('Input file not found!')
