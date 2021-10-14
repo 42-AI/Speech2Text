@@ -1,2 +1,7 @@
 __pycache__/
+
 *.swp
+
+input.wav
+data/
+weights.pth
