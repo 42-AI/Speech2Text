@@ -10,13 +10,15 @@ class SpeechDataset(torch.utils.data.Dataset):
         '''
 
         self.dir_path = dir_path
-        self.speech_files = os.listdir(dir_path + '/speech/')
+
+    def __len__(self):
+        return len(os.listdir(self.dir_path + '/speech/'))
 
     def __getitem__(self, idx):
-        speech_file = self.speech_files[idx]
+        speech_file = self.dir_path + '/speech/' + str(idx) + '.wav'
         speech = torchaudio.load(speech_file)
 
-        text_file = open(dir_path + '/text/' + str(idx), "r")
+        text_file = open(self.dir_path + '/text/' + str(idx), "r")
         text = text_file.read()
 
         return speech, text
