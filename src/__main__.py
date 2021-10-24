@@ -21,23 +21,26 @@ DICTIONARY_FILE = 'dictionary.txt'
 # The weights file
 WEIGHTS_FILE = 'weights.pth'
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
+# FIXME device = "cuda" if torch.cuda.is_available() else "cpu"
+device = "cpu"
 print("Using {} device".format(device))
 
 class Net(nn.Module):
     def __init__(self):
         super(Net, self).__init__()
-        self.rnn = nn.RNN(spectrogram.FREQUENCY_RANGE, 10, 2, batch_first=True, bidirectional=True)
-        self.hn = torch.randn(2 * spectrogram.FREQUENCY_RANGE, 1, 10)
+        self.rnn = nn.RNN(spectrogram.FREQUENCY_RANGE, 1, 2, batch_first=True, bidirectional=True)
+        self.hn = torch.randn(4, 1, 1)
 
         self.loss_fn = nn.CrossEntropyLoss()
         self.optimizer = torch.optim.SGD(self.parameters(), lr=1e-3)
 
     def forward(self, x):
-        print(x.shape)
-        print(self.hn.shape)
+        self.hn = self.hn.to(device)
         y, hn = self.rnn(x, self.hn)
         self.hn = hn
+
+        # TODO
+
         return y
 
 
@@ -58,6 +61,7 @@ def train(dataloader, model, dict):
 
         X, y = X.to(device), y.to(device)
         pred = model(X)
+        print(pred.shape, y.shape)
         loss = model.loss_fn(pred, y)
 
         optimizer.zero_grad()

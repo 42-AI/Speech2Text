@@ -43,5 +43,5 @@ def prepare(audio):
     spec = get_spectrogram(waveform)[0]
     X = numpy.expand_dims(numpy.array(spec), axis=0)
     X = numpy.moveaxis(X, 1, -1)
-    # TODO X = X.view(X.shape[0], X.shape[1], LOW_FREQUENCY + 1)
+    X = numpy.delete(X, numpy.arange(LOW_FREQUENCY + 1), axis=2)
     return torch.tensor(X)
