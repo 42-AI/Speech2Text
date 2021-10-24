@@ -2,8 +2,9 @@ import os
 
 import torch
 import torchaudio
+from torch.utils.data import Dataset
 
-class SpeechDataset(torch.utils.data.Dataset):
+class SpeechDataset(Dataset):
     def __init__(self, dir_path: str):
         '''
         `dir_path` is the path to the data directory.

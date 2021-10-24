@@ -3,15 +3,13 @@ import os.path
 import sys
 
 from torch import nn
-import librosa
-import matplotlib.pyplot as plt
 import numpy
 import torch
 import torchaudio
-import torchaudio.transforms as transforms
 
 import dataset
 import scoring
+import spectrogram
 import word
 
 # The input file
@@ -23,28 +21,24 @@ DICTIONARY_FILE = 'dictionary.txt'
 # The weights file
 WEIGHTS_FILE = 'weights.pth'
 
-# The lower end of the freqency range
-LOW_FREQUENCY = 80
-# The heigher end of the freqency range
-HIGH_FREQUENCY = 500
-
-# The width of the used frequency range
-FREQUENCY_RANGE = HIGH_FREQUENCY - LOW_FREQUENCY
-
 device = "cuda" if torch.cuda.is_available() else "cpu"
 print("Using {} device".format(device))
 
 class Net(nn.Module):
     def __init__(self):
         super(Net, self).__init__()
-        self.rnn = nn.RNN(FREQUENCY_RANGE, 10, 2, batch_first=True, bidirectional=True)
+        self.rnn = nn.RNN(spectrogram.FREQUENCY_RANGE, 10, 2, batch_first=True, bidirectional=True)
+        self.hn = torch.randn(2 * spectrogram.FREQUENCY_RANGE, 1, 10)
 
         self.loss_fn = nn.CrossEntropyLoss()
         self.optimizer = torch.optim.SGD(self.parameters(), lr=1e-3)
 
     def forward(self, x):
-        output, hn = self.rnn(x)
-        return output
+        print(x.shape)
+        print(self.hn.shape)
+        y, hn = self.rnn(x, self.hn)
+        self.hn = hn
+        return y
 
 
 
@@ -54,12 +48,15 @@ def train(dataloader, model, dict):
     '''
 
     model.train()
-    for batch, (X, y) in enumerate(dataloader):
-        words = word.split(y)
-        # TODO Associate each words to a vector, creating a matrix
-        y = y.to(device)
+    for batch in range(len(dataloader)):
+        (X, y) = dataloader[batch]
 
-        X = X.to(device)
+        X = spectrogram.prepare(X)
+
+        words = word.split(y)
+        y = word.build_matrix(dict, words)
+
+        X, y = X.to(device), y.to(device)
         pred = model(X)
         loss = model.loss_fn(pred, y)
 
@@ -77,11 +74,12 @@ def test(dataloader, model, dict):
     wer = 0.
     with torch.no_grad():
         for X, y in dataloader:
-            words = word.split(y)
-            # TODO Associate each words to a vector, creating a matrix
-            y = y.to(device)
+            X = spectrogram.prepare(X)
 
-            X = X.to(device)
+            words = word.split(y)
+            y = word.build_matrix(dict, words)
+
+            X, y = X.to(device), y.to(device)
             pred = model(X)
             loss += model.loss_fn(pred, y)
             wer += word_error_rate(pred, y)
@@ -97,10 +95,14 @@ def test(dataloader, model, dict):
 def create_dict(dataloader):
     dict = OrderedDict()
 
-    for _, (_, y) in enumerate(dataloader):
+    i = 0
+    for batch in range(len(dataloader)):
+        (_, y) = dataloader[batch]
+
         words = word.split(y)
         for w in words:
-            dict[w] = None
+            dict[w] = i # TODO Do not insert if the dictionnary already contains the word
+            i += 1
 
     return dict
 
@@ -108,42 +110,12 @@ def load_dict(file):
     dict = OrderedDict()
     f = open(file, "r")
 
+    i = 0
     for l in f.readlines():
-        dict[l] = None
+        dict[l] = i
+        i += 1
 
     return dict
-
-
-
-def get_spectrogram(waveform):
-    '''
-    Returns the spectrogram of the given sound.
-    '''
-
-    spectrogram_transform = transforms.Spectrogram(
-        n_fft=HIGH_FREQUENCY * 2,
-        win_length=None,
-        hop_length=HIGH_FREQUENCY,
-        center=True,
-        pad_mode='reflect',
-        power=2.0,
-    )
-
-    return spectrogram_transform(waveform)
-
-def show_spectrogram(spec):
-    '''
-    Shows a spectrogram.
-    '''
-
-    # TODO Support multiple channels?
-    figure, axis = plt.subplots(1, 1)
-    axis.set_title('Spectrogram')
-    axis.set_ylabel('Frequency')
-    axis.set_xlabel('Frame')
-    im = axis.imshow(librosa.power_to_db(spec[0]), origin='lower', aspect='auto')
-    figure.colorbar(im, ax=axis)
-    plt.show()
 
 
 
@@ -175,7 +147,7 @@ if len(sys.argv) > 1 and sys.argv[1] == '--train':
     epochs = 5
     for t in range(epochs):
         print(f"Epoch {t+1}\n-------------------------------")
-        train(dataloader, model)
+        train(dataloader, model, dictionary)
         test(dataloader, model) # TODO Use bootstrapping on the dataset
     print("Done!")
 
@@ -199,8 +171,8 @@ else:
             waveform, sample_rate = torchaudio.load(INPUT_FILE)
 
             # Showing the spectrogram of the input sound
-            spec = get_spectrogram(waveform)
-            show_spectrogram(spec)
+            spec = spectrogram.get_spectrogram(waveform)
+            spectrogram.show_spectrogram(spec)
 
             print('Running model...')
             net_in = numpy.moveaxis(numpy.array(spec), 1, -1)
